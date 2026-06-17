@@ -1,0 +1,38 @@
+Package: sugefReportes
+Title: Cliente R para la API REST de SUGEF (Costa Rica)
+Version: 0.1.0
+Authors@R: 
+    person(
+      given   = "Diego",
+      family  = "Sáenz Castro",
+      email   = "correo@ejemplo.com",
+      role    = c("aut", "cre"),
+      comment = c(ORCID = "")
+    )
+Description: Proporciona acceso programático a la API REST pública de la
+    Superintendencia General de Entidades Financieras (SUGEF) de Costa Rica.
+    Permite descargar reportes financieros (balance de situación, estado de
+    resultados, indicadores financieros) y reportes de cartera de crédito
+    (por actividad económica, categoría de riesgo y días de atraso) para
+    cualquier entidad supervisada o sector, en rangos de fechas arbitrarios.
+    Maneja automáticamente el cambio normativo de enero 2024 que divide los
+    reportes de cartera entre la normativa SUGEF 1-05 y la CONASSIF 14-21,
+    con lógica configurable de unión o separación de ambos bloques.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Language: es
+URL: https://github.com/usuario/sugefReportes
+BugReports: https://github.com/usuario/sugefReportes/issues
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Depends:
+    R (>= 4.1.0)
+Imports:
+    dplyr (>= 1.1.0),
+    tibble (>= 3.2.0),
+    httr (>= 1.4.0),
+    XML (>= 3.99.0),
+    jsonlite (>= 1.8.0)
+Suggests:
+    devtools,
+    pak

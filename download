@@ -1,0 +1,6 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^DESCRIPCION\.md$
+^LICENSE\.md$
+^\.github$
+^ejemplos$
