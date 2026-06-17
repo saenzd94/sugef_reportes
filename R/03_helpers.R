@@ -107,6 +107,7 @@ secuencia_mensual_sugef <- function(from, to = NULL) {
     # Se adicionan acronimos de BCR y BNCR para llamar a esas entidades por esos nombres
     mutate(NOM_ENT = case_when(grepl(toupper("Banco de Costa Rica"), NOM_ENT) == 1 ~ paste(NOM_ENT, "BCR", sep = " - "),
                                grepl(toupper("Banco Nacional"), NOM_ENT) == 1 ~ paste(NOM_ENT, "BNCR", sep = " - "),
+                               grepl(toupper("Banco Popular"), NOM_ENT) == 1 ~ paste(NOM_ENT, "BPDC", sep = " - "),
                                TRUE ~ NOM_ENT)
            )
 
