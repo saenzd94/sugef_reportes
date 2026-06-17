@@ -1,6 +1,200 @@
-^.*\.Rproj$
-^\.Rproj\.user$
-^DESCRIPCION\.md$
-^LICENSE\.md$
-^\.github$
-^ejemplos$
+# ==============================================================================
+# 05_reportes_cartera.R
+# Reportes de cartera de crédito con manejo del corte normativo enero 2024.
+# ==============================================================================
+
+.CONF_REPORTES_CARTERA <- list(
+  cartera_actividad = list(
+    nombre    = "Cartera por Actividad Economica",
+    post_2023 = list(
+      endpoint        = "/ReporteCrediticio/MAPI/ReporteActividadEconomica",
+      param_body      = "parametrosCrediticio",
+      usa_dias_atraso = FALSE
+    ),
+    pre_2024 = list(
+      endpoint        = "/ReporteCrediticioHasta2023/MAPI/ReporteActividadEconomicaHasta2023",
+      param_body      = "parametrosCrediticio",
+      usa_dias_atraso = FALSE
+    )
+  ),
+  cartera_actividad_riesgo = list(
+    nombre    = "Cartera por Actividad Economica y Categoria de Riesgo",
+    post_2023 = list(
+      endpoint        = "/ReporteCrediticio/MAPI/ReporteActividadEconomicaCategoriaRiesgo",
+      param_body      = "parametrosCrediticio",
+      usa_dias_atraso = FALSE
+    ),
+    pre_2024 = list(
+      endpoint        = "/ReporteCrediticioHasta2023/MAPI/ReporteActividadEconomicaCategoriaRiesgoHasta2023",
+      param_body      = "parametrosCrediticio",
+      usa_dias_atraso = FALSE
+    )
+  ),
+  cartera_actividad_atraso = list(
+    nombre    = "Cartera por Actividad Economica y Dias de Atraso",
+    post_2023 = list(
+      endpoint        = "/ReporteCrediticio/MAPI/ReporteActividadEconomicaDiasAtraso",
+      param_body      = "parametrosCrediticioDiasAtraso",
+      usa_dias_atraso = TRUE
+    ),
+    pre_2024 = list(
+      endpoint        = "/ReporteCrediticioHasta2023/MAPI/ReporteActividadEconomicaDiasAtrasoHasta2023",
+      param_body      = "parametrosCrediticioDiasAtraso",
+      usa_dias_atraso = TRUE
+    )
+  ),
+  cartera_riesgo_atraso = list(
+    nombre    = "Cartera por Categoria de Riesgo y Dias de Atraso",
+    post_2023 = list(
+      endpoint        = "/ReporteCrediticio/MAPI/ReporteCategoriaRiesgoDiasAtraso",
+      param_body      = "parametrosCrediticioDiasAtraso",
+      usa_dias_atraso = TRUE
+    ),
+    pre_2024 = list(
+      endpoint        = "/ReporteCrediticioHasta2023/MAPI/ReporteCategoriaRiesgoDiasAtrasoHasta2023",
+      param_body      = "parametrosCrediticioDiasAtraso",
+      usa_dias_atraso = TRUE
+    )
+  )
+)
+
+#' Llamada unitaria: un reporte de cartera, una entidad, un período
+#' @keywords internal
+.reporte_cartera_unitario <- function(tipo_reporte, cod_entidad, cod_sector,
+                                      periodo, normativa = "1", dias_atraso = "",
+                                      max_reintentos = 3, pausa = 1) {
+  es_pre_2024  <- as.Date(periodo, format = "%Y%m%d") < FECHA_CORTE_CARTERA
+  conf_periodo <- if (es_pre_2024) .CONF_REPORTES_CARTERA[[tipo_reporte]]$pre_2024 else
+                                   .CONF_REPORTES_CARTERA[[tipo_reporte]]$post_2023
+
+  params <- list(
+    codigoEntidad     = as.character(cod_entidad),
+    codigoTipoEntidad = as.character(cod_sector),
+    periodos          = as.character(periodo),
+    normativa         = as.character(normativa)
+  )
+  if (conf_periodo$usa_dias_atraso) params$diasAtraso <- as.character(dias_atraso)
+
+  body_list <- stats::setNames(list(params), conf_periodo$param_body)
+  resp <- .sugef_post(conf_periodo$endpoint, body_list,
+                      max_reintentos = max_reintentos, pausa = pausa)
+  if (is.null(resp)) return(tibble::tibble())
+  .parsear_json_post(resp)
+}
+
+#' Recopila un bloque de cartera (N entidades × M períodos del mismo bloque normativo)
+#' @keywords internal
+.recopilar_bloque_cartera <- function(tipo_reporte, entidades_df, periodos_bloque,
+                                       normativa, dias_atraso = "",
+                                       pausa_entre_llamadas = 0.5, verbose = TRUE,
+                                       offset_contador = 0L, total_global = NULL) {
+  if (length(periodos_bloque) == 0) return(tibble::tibble())
+  total_bloque  <- nrow(entidades_df) * length(periodos_bloque)
+  total_mostrar <- if (!is.null(total_global)) total_global else total_bloque
+  resultados    <- vector("list", total_bloque)
+  contador      <- 0L
+
+  for (i in seq_len(nrow(entidades_df))) {
+    ent <- entidades_df[i, ]
+    for (per in periodos_bloque) {
+      contador <- contador + 1L
+      if (verbose) {
+        message(sprintf("  [%d/%d] %-50s | %s",
+                        offset_contador + contador, total_mostrar, ent$NOM_ENT, per))
+      }
+      df <- .reporte_cartera_unitario(tipo_reporte, ent$COD_ENT, ent$COD_SEC,
+                                      per, normativa, dias_atraso)
+      if (nrow(df) > 0) {
+        df <- tibble::add_column(df,
+          COD_ENT = ent$COD_ENT, ABR_ENT = ent$ABR_ENT,
+          NOM_ENT = ent$NOM_ENT, DES_SEC = ent$DES_SEC,
+          COD_SEC = ent$COD_SEC, PERIODO = per,
+          .before = 1
+        )
+      }
+      resultados[[contador]] <- df
+      if (pausa_entre_llamadas > 0 && (offset_contador + contador) < total_mostrar) {
+        Sys.sleep(pausa_entre_llamadas)
+      }
+    }
+  }
+
+  validos <- Filter(function(x) !is.null(x) && nrow(x) > 0, resultados)
+  if (length(validos) == 0) return(tibble::tibble())
+  dplyr::bind_rows(validos)
+}
+
+#' Llamada en lote con manejo automático del corte normativo enero 2024
+#' @keywords internal
+.obtener_reportes_cartera <- function(tipo_reporte, entidades_df, periodos,
+                                       normativa_pre = "1", normativa_post = "1",
+                                       dias_atraso = "", intentar_union = TRUE,
+                                       pausa_entre_llamadas = 0.5, verbose = TRUE) {
+  conf           <- .CONF_REPORTES_CARTERA[[tipo_reporte]]
+  total_llamadas <- nrow(entidades_df) * length(periodos)
+  corte          <- .detectar_corte_cartera(periodos)
+
+  if (verbose) {
+    message(sprintf(
+      "\nReporte: %s\nEntidades: %d | Periodos: %d | Total llamadas: %d",
+      conf$nombre, nrow(entidades_df), length(periodos), total_llamadas
+    ))
+    if (corte$hay_corte) {
+      message(sprintf(
+        "  ADVERTENCIA: el rango cruza el corte normativo de enero 2024.\n  Pre-2024  (%d): %s\n  Post-2023 (%d): %s",
+        length(corte$pre_2024),  paste(corte$pre_2024,  collapse = ", "),
+        length(corte$post_2024), paste(corte$post_2024, collapse = ", ")
+      ))
+    }
+  }
+
+  # Sin corte: un único bloque
+  if (!corte$hay_corte) {
+    es_pre <- length(corte$pre_2024) > 0
+    return(.recopilar_bloque_cartera(
+      tipo_reporte         = tipo_reporte,
+      entidades_df         = entidades_df,
+      periodos_bloque      = if (es_pre) corte$pre_2024 else corte$post_2024,
+      normativa            = if (es_pre) normativa_pre  else normativa_post,
+      dias_atraso          = dias_atraso,
+      pausa_entre_llamadas = pausa_entre_llamadas,
+      verbose              = verbose,
+      offset_contador      = 0L,
+      total_global         = total_llamadas
+    ))
+  }
+
+  # Con corte: procesar cada bloque
+  n_pre <- nrow(entidades_df) * length(corte$pre_2024)
+  if (verbose) message(sprintf("\n--- BLOQUE PRE-2024 (SUGEF 1-05) [%d llamadas] ---", n_pre))
+  df_pre <- .recopilar_bloque_cartera(tipo_reporte, entidades_df, corte$pre_2024,
+                                       normativa_pre, dias_atraso,
+                                       pausa_entre_llamadas, verbose,
+                                       0L, total_llamadas)
+
+  n_post <- nrow(entidades_df) * length(corte$post_2024)
+  if (verbose) message(sprintf("\n--- BLOQUE POST-2023 (CONASSIF 14-21) [%d llamadas] ---", n_post))
+  df_post <- .recopilar_bloque_cartera(tipo_reporte, entidades_df, corte$post_2024,
+                                        normativa_post, dias_atraso,
+                                        pausa_entre_llamadas, verbose,
+                                        n_pre, total_llamadas)
+
+  if (!intentar_union) {
+    if (verbose) message("\nintentар_union = FALSE. Retornando lista $pre_2024 / $post_2024.")
+    return(list(pre_2024 = df_pre, post_2024 = df_post))
+  }
+
+  if (verbose) message("\nIntentando unir bloques pre/post 2024...")
+  resultado <- .intentar_union_cartera(df_pre, df_post)
+
+  if (verbose) {
+    if (is.data.frame(resultado)) {
+      union_ok <- is.null(attr(resultado, "advertencia_union"))
+      message(if (union_ok) sprintf("Union exitosa: %d filas.", nrow(resultado))
+              else sprintf("Union con diferencias de columnas: %d filas. Revise advertencias.", nrow(resultado)))
+    } else {
+      message("Union no posible. Retornando lista $pre_2024 / $post_2024.")
+    }
+  }
+  resultado
+}
