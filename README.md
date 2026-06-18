@@ -15,11 +15,11 @@ Cliente R para la **API REST pública de SUGEF** (Superintendencia General de En
 ```r
 # Opción 1: devtools
 install.packages("devtools")
-devtools::install_github("saenzd94/sugefReportes")
+devtools::install_github("saenzd94/sugef_Reportes")
 
 # Opción 2: pak (más rápido, resuelve dependencias automáticamente)
 install.packages("pak")
-pak::pkg_install("saenzd94/sugefReportes")
+pak::pkg_install("saenzd94/sugef_Reportes")
 ```
 
 > **Requisito**: R ≥ 4.1.0
