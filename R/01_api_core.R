@@ -105,7 +105,7 @@ SUGEF_API_BASE <- "https://www.sugef.fi.cr/Bccr.Sugef.Reportes_SitioWeb.API"
 .parsear_xml_get <- function(resp) {
   texto <- httr::content(resp, as = "text", encoding = "UTF-8")
   tryCatch({
-    salidaxml  <- XML::xmlParse(texto, asText = TRUE, useInternalNodes = FALSE, isHTML = TRUE)
+    salidaxml  <- XML::xmlParse(texto, asText = TRUE, useInternalNodes = FALSE, isHTML = TRUE, encoding = "UTF-8")
     nodo_raiz  <- XML::xmlRoot(salidaxml)
     hijos      <- XML::xmlChildren(nodo_raiz)
     # La estructura XML envuelve el JSON en 2 niveles de anidamiento
